@@ -5,6 +5,7 @@ import registerRoutes from "./routes/register.route.js";
 import loginRoutes from "./routes/login.route.js";
 import dotenv from "dotenv";
 import cors from "cors";
+import routerOllama from "./routes/ollama.route.js";
 dotenv.config();
 
 const app = express();
@@ -21,13 +22,22 @@ app.use((req, res, next) => {
   next();
 });
 
-
 app.use("/", userRoutes);
 app.use("/register", registerRoutes);
 app.use("/account/login", loginRoutes);
 
-startDB().then(()=>{
-    app.listen(PORT,()=>{
-        console.log("Servidor activo.");
-    });
+app.use("/ollama", routerOllama);
+
+app.get("/generate", (req, res) => {
+  try {
+    return res.json({res:"hola"});
+  } catch (error) {
+    console.log(error);
+  }
+});
+
+startDB().then(() => {
+  app.listen(PORT, () => {
+    console.log("Servidor activo." + PORT);
+  });
 });
