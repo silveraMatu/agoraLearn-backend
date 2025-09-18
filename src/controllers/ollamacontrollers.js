@@ -1,5 +1,3 @@
-import { application } from "express";
-
 export const generateQuestion = async (req, res) => {
   try {
     const { consulta, modelo, signal, stream } = req.body;
