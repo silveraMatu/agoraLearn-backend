@@ -1,65 +1,70 @@
 import { application } from "express";
 
 export const generateQuestion = async (req, res) => {
-    try {
+  try {
+    const { consulta, modelo, signal, stream } = req.body;
 
-        const { consulta, modelo, signal, stream } = req.body
+    console.log(consulta, modelo);
 
-        console.log(consulta, modelo);
+    (async () => {
+      const peticion = await fetch(`http://localhost:11434/api/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: `gemma:2b`,
+          prompt: `${consulta}`
+        }),
+      });
 
-        (async () => {
-            const peticion = await fetch(`http://localhost:11434/api/generate`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    model: `gemma3`,
-                    prompt: `${consulta}`,
-                })
-            })
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Transfer-Encoding", "chunked");
 
-            res.setHeader("Content-Type", "text/plain; charset=utf-8");
-            res.setHeader("Transfer-Encoding", "chunked");
+      const reader = peticion.body.getReader();
+      let decoder = new TextDecoder();
+      let chunk = await reader.read();
 
-            const reader = peticion.body.getReader();
-            let decoder = new TextDecoder();
-            let chunk = await reader.read();
+      let accumulatedJSON = "";
 
-            let accumulatedJSON = "";
+      while (!chunk.done) {
+        const texto = decoder.decode(chunk.value, { stream: true });
+        accumulatedJSON += texto;
 
-            while (!chunk.done) {
-                const texto = decoder.decode(chunk.value, { stream: true });
-                accumulatedJSON += texto;
+        let startIndex = 0;
+        while (startIndex < accumulatedJSON.length) {
+          const startBracketIndex = accumulatedJSON.indexOf("{", startIndex);
+          if (startBracketIndex === -1) break;
 
-                let startIndex = 0;
-                while (startIndex < accumulatedJSON.length) {
-                    const startBracketIndex = accumulatedJSON.indexOf("{", startIndex);
-                    if (startBracketIndex === -1) break;
+          const endBracketIndex = accumulatedJSON.indexOf(
+            "}",
+            startBracketIndex
+          );
+          if (endBracketIndex === -1) break;
 
-                    const endBracketIndex = accumulatedJSON.indexOf("}", startBracketIndex);
-                    if (endBracketIndex === -1) break;
+          const jsonString = accumulatedJSON.slice(
+            startBracketIndex,
+            endBracketIndex + 1
+          );
 
-                    const jsonString = accumulatedJSON.slice(startBracketIndex, endBracketIndex + 1);
-
-                    try {
-                        const responseObject = JSON.parse(jsonString);
-                        const responseValue = responseObject.response;
-                        res.write(responseValue); // 👉 ya streaméas directo
-                    } catch (error) {
-                        console.log(error);
-                    }
-
-                    startIndex = endBracketIndex + 1;
-                }
-
-                accumulatedJSON = accumulatedJSON.slice(startIndex);
-                chunk = await reader.read();
+          try {
+            const responseObject = JSON.parse(jsonString);
+            if (responseObject.response !== undefined) {
+              res.write(String(responseObject.response));
             }
+          } catch (error) {
+            console.log("Error parseando chunk:", error);
+          }
 
-            res.end();
+          startIndex = endBracketIndex + 1;
+        }
 
-        })()
+        accumulatedJSON = accumulatedJSON.slice(startIndex);
+        chunk = await reader.read();
+      }
+
+      res.end();
+    })();
   } catch (error) {
     console.log(error);
   }
